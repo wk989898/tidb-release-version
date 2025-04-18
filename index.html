@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PR release version</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+
+        h1 {
+            color: #24292e;
+            margin-bottom: 20px;
+        }
+
+        .form-container {
+            background-color: #f6f8fa;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+
+        input,
+        button {
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #d1d5da;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        input {
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: #2ea44f;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        button:hover {
+            background-color: #2c974b;
+        }
+
+        #result {
+            background-color: #f6f8fa;
+            border-radius: 6px;
+            padding: 20px;
+            display: none;
+        }
+
+        #loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .release-info {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eaecef;
+        }
+
+        .release-branch {
+            font-weight: 600;
+            color: #0366d6;
+        }
+
+        .error {
+            color: #cb2431;
+            font-weight: 600;
+        }
+
+        .tag {
+            display: inline-block;
+            background-color: #e6f1ff;
+            color: #0366d6;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+
+            .form-container,
+            #result {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <h1>GitHub PR Release Tracker</h1>
+
+    <div class="form-container">
+        <label for="owner">Repo Owner:</label>
+        <input type="text" id="owner" placeholder="e.g. octocat">
+
+        <label for="repo">Repo Name:</label>
+        <input type="text" id="repo" placeholder="e.g. hello-world">
+
+        <label for="token">GitHub Access Token:</label>
+        <input type="password" id="token" placeholder="Enter the GitHub personal access token">
+
+        <label for="prNumber">PR Number:</label>
+        <input type="number" id="prNumber" placeholder="e.g. 101">
+
+        <button id="checkBtn">Search</button>
+    </div>
+
+    <div id="loading">
+        <p>Checking, please wait...</p>
+    </div>
+
+    <div id="result"></div>
+
+    <script type="module">
+        import { Octokit } from 'https://esm.sh/@octokit/rest@21.1.1'
+
+
+        async function getPRInfo(octokit, owner, repo, pull_number) {
+            let prData = await octokit.rest.pulls.get({
+                owner,
+                repo,
+                pull_number
+            }).then(res => res.data)
+            const match = prData.body.match(/^This is an automated cherry-pick of #(\d+)/)
+            if (match) {
+                pull_number = match[1]
+                prData = await octokit.rest.pulls.get({
+                    owner,
+                    repo,
+                    pull_number
+                }).then(res => res.data)
+            }
+            return [prData, pull_number]
+        }
+
+        async function getBranches(octokit, owner, repo, disableCache = false) {
+            const key = `${owner}-${repo}-branches`
+            let branches = null
+            if (disableCache) {
+                localStorage.removeItem(key)
+            } else {
+                branches = JSON.parse(localStorage.getItem(key))
+            }
+            if (branches === null) {
+                branches = await octokit.paginate(octokit.rest.repos.listBranches, {
+                    owner,
+                    repo,
+                    per_page: 100,
+                }).then(res => res.map(branch => branch.name))
+                localStorage.setItem(key, JSON.stringify(branches))
+            }
+            return branches
+        }
+
+        async function getTags(octokit, owner, repo, disableCache = false) {
+            const key = `${owner}-${repo}-tags`
+            let tags = null
+            if (disableCache) {
+                localStorage.removeItem(key)
+            } else {
+                tags = JSON.parse(localStorage.getItem(key))
+            }
+            if (tags === null) {
+                let listTags = await octokit.paginate(octokit.rest.repos.listTags, {
+                    owner,
+                    repo,
+                    per_page: 100,
+                })
+                tags = await Promise.all(
+                    listTags.map(async tag => {
+                        try {
+                            const { data: tagCommit } = await octokit.rest.git.getCommit({
+                                owner,
+                                repo,
+                                commit_sha: tag.commit.sha
+                            })
+                            return {
+                                name: tag.name,
+                                sha: tag.commit.sha,
+                                date: tagCommit.author.date
+                            }
+                        } catch (e) {
+                            return {
+                                name: tag.name,
+                                sha: tag.commit.sha,
+                                date: "0" // default date
+                            }
+                        }
+                    })
+                )
+                localStorage.setItem(key, JSON.stringify(tags))
+            }
+            return tags
+        }
+
+        async function getVersionsFromBranches(octokit, branches, owner, repo, prMergedAt, pull_number, prTags) {
+            const versions = {}
+            await Promise.all(
+                branches.map(async branch => {
+                    try {
+                        const commits = await octokit.paginate(octokit.rest.repos.listCommits, {
+                            owner,
+                            repo,
+                            sha: branch,
+                            since: prMergedAt.toISOString(),
+                            per_page: 100,
+                        })
+                        if (!commits) {
+                            return
+                        }
+                        let cherryPickCommit = null
+                        let shaBranches = new Set(commits.map(commit => {
+                            if (commit.commit.message.includes(`#${pull_number}`)) {
+                                cherryPickCommit = commit
+                            }
+                            return commit.sha
+                        }))
+                        if (cherryPickCommit === null) {
+                            return
+                        }
+                        versions[branch] = []
+                        prTags.forEach(tag => {
+                            if (shaBranches.has(tag.sha)) {
+                                versions[branch].push(tag.name)
+                            }
+                        })
+                    } catch (error) {
+                        console.error("get release version failed", error)
+                    }
+                })
+            )
+            return versions
+        }
+
+
+        document.getElementById('checkBtn').addEventListener('click', async function () {
+            const owner = document.getElementById('owner').value
+            const repo = document.getElementById('repo').value
+            const token = document.getElementById('token').value
+            const prNumber = parseInt(document.getElementById('prNumber').value)
+
+            if (!owner || !repo || !token || !prNumber) {
+                alert('Please complete all required fields!')
+                return
+            }
+
+            const resultDiv = document.getElementById('result')
+            const loadingDiv = document.getElementById('loading')
+
+            resultDiv.style.display = 'none'
+            loadingDiv.style.display = 'block'
+            resultDiv.innerHTML = ''
+
+            try {
+                const octokit = new Octokit.Octokit({
+                    auth: token
+                })
+
+                const prData = await getPRInfo(octokit, owner, repo, prNumber)
+
+                if (!prData.merged) {
+                    throw new Error(`PR #${prNumber} has not yet been merged and the release version cannot be determined.`)
+                }
+
+                const prMergedAt = new Date(prData.merged_at)
+                const mergeCommitSha = prData.merge_commit_sha
+                const branches = await getBranches(octokit, owner, repo, true)
+                if (branches.length === 0) {
+                    throw new Error('No release branches were found.')
+                }
+
+                let resultHTML = `<h2>PR #${prNumber} release information</h2>`
+                resultHTML += `<p>PR merged at: ${prMergedAt.toISOString()}</p>`
+
+                const tags = getTags(octokit, owner, repo, true)
+                const prTags = tags.filter(tag => new Date(tag.date) > prMergedAt)
+                const versions = await getVersionsFromBranches(octokit, branches, owner, repo, prMergedAt, prNumber, prTags)
+                for (const branch in versions) {
+                    resultHTML += `<div class="release-info">`
+                    resultHTML += `<h3 class="release-branch">${branch}</h3>`
+                    const tags = versions[branch]
+                    if (!tags) {
+                        resultHTML += `<p>This PR has been merged into ${branch} but has not yet been posted to any tag. will be posted in the next release.</p>`
+                    }
+                    for (const tag of tags) {
+                        resultHTML += `<p>This PR will be included in the <span class="tag">${tag}</span> version.</p>`
+                    }
+                    resultHTML += `</div>`
+                }
+                resultDiv.innerHTML = resultHTML
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">Error. ${error.toString()}</p>`
+            } finally {
+                loadingDiv.style.display = 'none'
+                resultDiv.style.display = 'block'
+            }
+        })
+    </script>
+</body>
+
+</html>
