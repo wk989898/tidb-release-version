@@ -4,8 +4,8 @@
 // @description  A userscript for GitHub to query tidb release version
 // @author       wk989898
 // @homepage     https://github.com/wk989898/tidb-release-version
-// @updateURL    https://github.com/wk989898/tidb-release-version/raw/master/tidb-release-version.js
-// @downloadURL  https://github.com/wk989898/tidb-release-version/raw/master/tidb-release-version.js
+// @updateURL    https://github.com/wk989898/tidb-release-version/raw/master/tidb-release-version.user.js
+// @downloadURL  https://github.com/wk989898/tidb-release-version/raw/master/tidb-release-version.user.js
 // @supportURL   https://github.com/wk989898/tidb-release-version
 // @match        https://github.com/pingcap/*
 // @match        https://github.com/tikv/*
