@@ -2,7 +2,7 @@
 
 A userscript for GitHub to query tidb release version, built using only the GitHub REST API. Check out [@octokit/rest.js](https://github.com/octokit/rest.js) for more details.
 
-<img src="https://github.com/user-attachments/assets/cb66b352-f092-479f-b44b-0a513c215859"/>
+![example](./example.png)
 
 ## Usage
 
