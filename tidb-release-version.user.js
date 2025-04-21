@@ -1,14 +1,14 @@
 // ==UserScript==
 // @name         tidb-release-version
-// @version      0.01
+// @version      0.02
 // @description  A userscript for GitHub to query tidb release version
 // @author       wk989898
 // @homepage     https://github.com/wk989898/tidb-release-version
-// @updateURL    https://github.com/wk989898/tidb-release-version/raw/master/tidb-release-version.js
-// @downloadURL  https://github.com/wk989898/tidb-release-version/raw/master/tidb-release-version.js
+// @updateURL    https://github.com/wk989898/tidb-release-version/raw/master/tidb-release-version.user.js
+// @downloadURL  https://github.com/wk989898/tidb-release-version/raw/master/tidb-release-version.user.js
 // @supportURL   https://github.com/wk989898/tidb-release-version
-// @match        https://github.com/pingcap/*/pull/*
-// @match        https://github.com/tikv/*/pull/*
+// @match        https://github.com/pingcap/*
+// @match        https://github.com/tikv/*
 // @license      MIT
 // @run-at       document-idle
 // ==/UserScript==
@@ -27,6 +27,10 @@
     const REFRESH_BUTTON = `${NAME}-refresh-btn`
     const PARENT_ELEMENT = ".gh-header-actions"
     const BROTHER_CLASS = "flex-md-order-2"
+    const EVENT_TYPE = `${NAME}-replace-state`
+    const PULL_REG = /pull\/\d+$/
+    const TIME_INTERVAL = 500
+
 
     function getRepoFromURL() {
         const currentURL = window.location.pathname
@@ -202,6 +206,11 @@
     }
 
     function CreateView() {
+        if (document.getElementById(INPUT_TOKEN)) {
+            console.warn("elements have been created before")
+            return
+        }
+
         const contnet = `
         <details class="position-relative details-overlay details-reset js-codespaces-details-container hx_dropdown-fullscreen">
             <summary class="Button--secondary Button--small Button float-none">
@@ -243,9 +252,7 @@
         const versionButton = document.createElement("div")
         versionButton.classList.add(BROTHER_CLASS)
         versionButton.innerHTML = contnet
-        const parent = document.querySelector(PARENT_ELEMENT)
-        parent.appendChild(versionButton)
-
+        document.querySelector(PARENT_ELEMENT).appendChild(versionButton)
         const loadingIndicator = document.getElementById(LOADING)
         const versionList = document.getElementById(VERSION_LIST)
         document.getElementById(INPUT_TOKEN_BUTTON).addEventListener("click", (e) => {
@@ -253,9 +260,9 @@
             localStorage.setItem(GITHUB_TOKEN, token)
             const prev = e.target.innerHTML
             e.target.innerHTML = `
-        <svg height="16" viewBox="0 0 16 16" version="1.1" width="16" class="octicon octicon-check js-clipboard-check-icon color-fg-success d-inline-block">
-            <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"></path>
-        </svg>`
+                <svg height="16" viewBox="0 0 16 16" version="1.1" width="16" class="octicon octicon-check js-clipboard-check-icon color-fg-success d-inline-block">
+                    <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"></path>
+                </svg>`
             setTimeout(() => {
                 e.target.innerHTML = prev
             }, 2000)
@@ -279,8 +286,18 @@
         })
     }
 
+    function proxy(fn) {
+        const handler = {
+            apply: (target, thisArg, argumentsList) => {
+                window.dispatchEvent(new CustomEvent(EVENT_TYPE))
+                return target.apply(thisArg, argumentsList)
+            }
+        }
+        history.replaceState = new Proxy(history.replaceState, handler)
+        window.addEventListener(EVENT_TYPE, fn)
+    }
 
-    function main() {
+    function start() {
         CreateView()
         getReleaseVersion().then(versions => {
             const loadingIndicator = document.getElementById(LOADING)
@@ -302,6 +319,18 @@
         })
     }
 
-    main()
+    if (PULL_REG.test(window.location.pathname)) {
+        start()
+    }
+    proxy(() => {
+        if (PULL_REG.test(window.location.pathname)) {
+            const interval = setInterval(() => {
+                if (document.querySelector(PARENT_ELEMENT)) {
+                    clearInterval(interval)
+                    start()
+                }
+            }, TIME_INTERVAL)
+        }
+    })
 
 })();
