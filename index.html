@@ -115,16 +115,16 @@
 
     <div class="form-container">
         <label for="owner">Repo Owner:</label>
-        <input type="text" id="owner" placeholder="e.g. octocat">
+        <input type="text" id="owner" placeholder="pingcap">
 
         <label for="repo">Repo Name:</label>
-        <input type="text" id="repo" placeholder="e.g. hello-world">
+        <input type="text" id="repo" placeholder="tidb">
 
         <label for="token">GitHub Access Token:</label>
         <input type="password" id="token" placeholder="Enter the GitHub personal access token">
 
-        <label for="prNumber">PR Number:</label>
-        <input type="number" id="prNumber" placeholder="e.g. 101">
+        <label for="pull_number">PR Number:</label>
+        <input type="number" id="pull_number" placeholder="101">
 
         <button id="checkBtn">Search</button>
     </div>
@@ -261,9 +261,9 @@
             const owner = document.getElementById('owner').value
             const repo = document.getElementById('repo').value
             const token = document.getElementById('token').value
-            const prNumber = parseInt(document.getElementById('prNumber').value)
+            const number = parseInt(document.getElementById('pull_number').value)
 
-            if (!owner || !repo || !token || !prNumber) {
+            if (!owner || !repo || !token || !number) {
                 alert('Please complete all required fields!')
                 return
             }
@@ -276,14 +276,13 @@
             resultDiv.innerHTML = ''
 
             try {
-                const octokit = new Octokit.Octokit({
+                const octokit = new Octokit({
                     auth: token
                 })
 
-                const prData = await getPRInfo(octokit, owner, repo, prNumber)
-
+                const [prData, pull_number] = await getPRInfo(octokit, owner, repo, number)
                 if (!prData.merged) {
-                    throw new Error(`PR #${prNumber} has not yet been merged and the release version cannot be determined.`)
+                    throw new Error(`PR #${pull_number} has not yet been merged and the release version cannot be determined.`)
                 }
 
                 const prMergedAt = new Date(prData.merged_at)
@@ -293,12 +292,12 @@
                     throw new Error('No release branches were found.')
                 }
 
-                let resultHTML = `<h2>PR #${prNumber} release information</h2>`
+                let resultHTML = `<h2>PR #${pull_number} release information</h2>`
                 resultHTML += `<p>PR merged at: ${prMergedAt.toISOString()}</p>`
 
-                const tags = getTags(octokit, owner, repo, true)
+                const tags = await getTags(octokit, owner, repo, true)
                 const prTags = tags.filter(tag => new Date(tag.date) > prMergedAt)
-                const versions = await getVersionsFromBranches(octokit, branches, owner, repo, prMergedAt, prNumber, prTags)
+                const versions = await getVersionsFromBranches(octokit, branches, owner, repo, prMergedAt, pull_number, prTags)
                 for (const branch in versions) {
                     resultHTML += `<div class="release-info">`
                     resultHTML += `<h3 class="release-branch">${branch}</h3>`
