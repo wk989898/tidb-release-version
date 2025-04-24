@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         tidb-release-version
-// @version      0.02
+// @version      0.03
 // @description  A userscript for GitHub to query tidb release version
 // @author       wk989898
 // @homepage     https://github.com/wk989898/tidb-release-version
@@ -125,37 +125,63 @@
         return tags
     }
 
-    async function getVersionsFromBranches(octokit, branches, owner, repo, prMergedAt, pull_number, prTags) {
+    async function getVersionsFromBranches(octokit, branches, owner, repo, prMergedAt, pull_number, tags) {
         const versions = {}
+        const prTagsMap = {}
+        const since = prMergedAt.toISOString()
+        tags.forEach(tag => {
+            if (new Date(tag.date) > prMergedAt) {
+                prTagsMap[tag.sha] = tag
+            }
+        })
+        const concurrency = (fn, thread) => {
+            const res = []
+            for (let i = 0; i < thread; i++) {
+                res.push(fn(i))
+            }
+            return Promise.all(res)
+        }
         await Promise.all(
             branches.map(async branch => {
                 try {
-                    const commits = await octokit.paginate(octokit.rest.repos.listCommits, {
-                        owner,
-                        repo,
-                        sha: branch,
-                        since: prMergedAt.toISOString(),
-                        per_page: 100,
-                    })
-                    if (!commits) {
-                        return
-                    }
-                    let cherryPickCommit = null
-                    let shaBranches = new Set(commits.map(commit => {
-                        if (commit.commit.message.includes(`#${pull_number}`)) {
-                            cherryPickCommit = commit
+                    let page = 1
+                    let thread = 1
+                    let cherryPickExist = false
+                    while (true) {
+                        const response = await concurrency(index => octokit.rest.repos.listCommits({
+                            owner,
+                            repo,
+                            since,
+                            page: page + index,
+                            sha: branch,
+                            per_page: 100,
+                        }), thread)
+                        const commits = response.flatMap(res => res.data)
+                        if (commits.length == 0) {
+                            break
                         }
-                        return commit.sha
-                    }))
-                    if (cherryPickCommit === null) {
-                        return
-                    }
-                    versions[branch] = []
-                    prTags.forEach(tag => {
-                        if (shaBranches.has(tag.sha)) {
-                            versions[branch].push(tag.name)
+                        for (let commit of commits) {
+                            if (prTagsMap[commit.sha] !== void 0) {
+                                const tag = prTagsMap[commit.sha]
+                                versions[branch] = tag.name
+                            }
+                            if (commit.commit.message.includes(`#${pull_number}`)) {
+                                if (versions[branch] === void 0) {
+                                    versions[branch] = "Next Release"
+                                }
+                                cherryPickExist = true
+                                break
+                            }
                         }
-                    })
+                        if (cherryPickExist) {
+                            break
+                        }
+                        page += thread
+                        thread += page
+                    }
+                    if (!cherryPickExist) {
+                        delete versions[branch]
+                    }
                 } catch (error) {
                     console.error("get release version failed", error)
                 }
@@ -179,25 +205,22 @@
         const prMergedAt = new Date(prData.merged_at)
         const branches = await getBranches(octokit, owner, repo, disableCache)
         const tags = await getTags(octokit, owner, repo, disableCache)
-        const prTags = tags.filter(tag => new Date(tag.date) > prMergedAt)
-        const versions = await getVersionsFromBranches(octokit, branches, owner, repo, prMergedAt, pull_number, prTags)
+        const versions = await getVersionsFromBranches(octokit, branches, owner, repo, prMergedAt, pull_number, tags)
         return versions
     }
 
     function genItems(versions) {
         let content = ""
-        for (const branch in versions) {
+        const sortedVersions = {}
+        Object.keys(versions).sort().forEach(key => {
+            sortedVersions[key] = versions[key]
+        })
+        for (const branch in sortedVersions) {
             content += `
         <li class="Box-row px-3 py-1 mt-0">
             <h4 class="d-flex flex-items-center px-1 color-fg-default text-bold no-underline">${branch}</h4>
             <div class="d-flex flex-wrap">`
-            const tags = versions[branch]
-            for (const tag of tags) {
-                content += `<span class="Button--small px-1 m-1 State State--closed d-flex flex-items-center" style="font-size: small;">${tag}</span>`
-            }
-            if (tags.length == 0) {
-                content += `<span class="Button--small px-1 m-1 State State--closed d-flex flex-items-center" style="font-size: small;">Next Release</span>`
-            }
+            content += `<span class="Button--small px-1 m-1 State State--closed d-flex flex-items-center" style="font-size: small;">${sortedVersions[branch]}</span>`
             content += `
             </div>
         </li>`
@@ -270,6 +293,7 @@
         document.getElementById(REFRESH_BUTTON).addEventListener("click", () => {
             loadingIndicator.style.display = 'block'
             versionList.style.display = 'none'
+            versionList.innerHTML = ""
             getReleaseVersion(true).then(versions => {
                 const items = genItems(versions)
                 if (items) {
@@ -332,5 +356,4 @@
             }, TIME_INTERVAL)
         }
     })
-
 })();

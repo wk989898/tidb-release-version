@@ -217,37 +217,63 @@
             return tags
         }
 
-        async function getVersionsFromBranches(octokit, branches, owner, repo, prMergedAt, pull_number, prTags) {
+        async function getVersionsFromBranches(octokit, branches, owner, repo, prMergedAt, pull_number, tags) {
             const versions = {}
+            const prTagsMap = {}
+            const since = prMergedAt.toISOString()
+            tags.forEach(tag => {
+                if (new Date(tag.date) > prMergedAt) {
+                    prTagsMap[tag.sha] = tag
+                }
+            })
+            const concurrency = (fn, thread) => {
+                const res = []
+                for (let i = 0; i < thread; i++) {
+                    res.push(fn(i))
+                }
+                return Promise.all(res)
+            }
             await Promise.all(
                 branches.map(async branch => {
                     try {
-                        const commits = await octokit.paginate(octokit.rest.repos.listCommits, {
-                            owner,
-                            repo,
-                            sha: branch,
-                            since: prMergedAt.toISOString(),
-                            per_page: 100,
-                        })
-                        if (!commits) {
-                            return
-                        }
-                        let cherryPickCommit = null
-                        let shaBranches = new Set(commits.map(commit => {
-                            if (commit.commit.message.includes(`#${pull_number}`)) {
-                                cherryPickCommit = commit
+                        let page = 1
+                        let thread = 1
+                        let cherryPickExist = false
+                        while (true) {
+                            const response = await concurrency(index => octokit.rest.repos.listCommits({
+                                owner,
+                                repo,
+                                since,
+                                page: page + index,
+                                sha: branch,
+                                per_page: 100,
+                            }), thread)
+                            const commits = response.flatMap(res => res.data)
+                            if (commits.length == 0) {
+                                break
                             }
-                            return commit.sha
-                        }))
-                        if (cherryPickCommit === null) {
-                            return
-                        }
-                        versions[branch] = []
-                        prTags.forEach(tag => {
-                            if (shaBranches.has(tag.sha)) {
-                                versions[branch].push(tag.name)
+                            for (let commit of commits) {
+                                if (prTagsMap[commit.sha] !== void 0) {
+                                    const tag = prTagsMap[commit.sha]
+                                    versions[branch] = tag.name
+                                }
+                                if (commit.commit.message.includes(`#${pull_number}`)) {
+                                    if (versions[branch] === void 0) {
+                                        versions[branch] = "Next Release"
+                                    }
+                                    cherryPickExist = true
+                                    break
+                                }
                             }
-                        })
+                            if (cherryPickExist) {
+                                break
+                            }
+                            page += thread
+                            thread += page
+                        }
+                        if (!cherryPickExist) {
+                            delete versions[branch]
+                        }
                     } catch (error) {
                         console.error("get release version failed", error)
                     }
@@ -255,7 +281,6 @@
             )
             return versions
         }
-
 
         document.getElementById('checkBtn').addEventListener('click', async function () {
             const owner = document.getElementById('owner').value
@@ -296,18 +321,15 @@
                 resultHTML += `<p>PR merged at: ${prMergedAt.toISOString()}</p>`
 
                 const tags = await getTags(octokit, owner, repo, true)
-                const prTags = tags.filter(tag => new Date(tag.date) > prMergedAt)
-                const versions = await getVersionsFromBranches(octokit, branches, owner, repo, prMergedAt, pull_number, prTags)
-                for (const branch in versions) {
+                const versions = await getVersionsFromBranches(octokit, branches, owner, repo, prMergedAt, pull_number, tags)
+                const sortedVersions = {}
+                Object.keys(versions).sort().forEach(key => {
+                    sortedVersions[key] = versions[key]
+                })
+                for (const branch in sortedVersions) {
                     resultHTML += `<div class="release-info">`
                     resultHTML += `<h3 class="release-branch">${branch}</h3>`
-                    const tags = versions[branch]
-                    if (!tags) {
-                        resultHTML += `<p>This PR has been merged into ${branch} but has not yet been posted to any tag. will be posted in the next release.</p>`
-                    }
-                    for (const tag of tags) {
-                        resultHTML += `<p>This PR will be included in the <span class="tag">${tag}</span> version.</p>`
-                    }
+                    resultHTML += `<p>This PR will be included in the <span class="tag">${sortedVersions[branch]}</span> version.</p>`
                     resultHTML += `</div>`
                 }
                 resultDiv.innerHTML = resultHTML
