@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         tidb-release-version
-// @version      0.03
+// @version      0.04
 // @description  A userscript for GitHub to query tidb release version
 // @author       wk989898
 // @homepage     https://github.com/wk989898/tidb-release-version
@@ -173,7 +173,7 @@
                                 break
                             }
                         }
-                        if (cherryPickExist) {
+                        if ((commits.length < thread * 100) || cherryPickExist) {
                             break
                         }
                         page += thread
@@ -202,10 +202,10 @@
             throw new Error(`PR #${pull_number} has not yet been merged and the release version cannot be determined.`)
         }
 
-        const prMergedAt = new Date(prData.merged_at)
+        const prCreatedAt = new Date(prData.created_at)
         const branches = await getBranches(octokit, owner, repo, disableCache)
         const tags = await getTags(octokit, owner, repo, disableCache)
-        const versions = await getVersionsFromBranches(octokit, branches, owner, repo, prMergedAt, pull_number, tags)
+        const versions = await getVersionsFromBranches(octokit, branches, owner, repo, prCreatedAt, pull_number, tags)
         return versions
     }
 

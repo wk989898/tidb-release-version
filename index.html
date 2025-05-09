@@ -217,12 +217,12 @@
             return tags
         }
 
-        async function getVersionsFromBranches(octokit, branches, owner, repo, prMergedAt, pull_number, tags) {
+        async function getVersionsFromBranches(octokit, branches, owner, repo, prCreateAt, pull_number, tags) {
             const versions = {}
             const prTagsMap = {}
-            const since = prMergedAt.toISOString()
+            const since = prCreateAt.toISOString()
             tags.forEach(tag => {
-                if (new Date(tag.date) > prMergedAt) {
+                if (new Date(tag.date) > prCreateAt) {
                     prTagsMap[tag.sha] = tag
                 }
             })
@@ -310,7 +310,7 @@
                     throw new Error(`PR #${pull_number} has not yet been merged and the release version cannot be determined.`)
                 }
 
-                const prMergedAt = new Date(prData.merged_at)
+                const prCreateAt = new Date(prData.created_at)
                 const mergeCommitSha = prData.merge_commit_sha
                 const branches = await getBranches(octokit, owner, repo, true)
                 if (branches.length === 0) {
@@ -318,10 +318,10 @@
                 }
 
                 let resultHTML = `<h2>PR #${pull_number} release information</h2>`
-                resultHTML += `<p>PR merged at: ${prMergedAt.toISOString()}</p>`
+                resultHTML += `<p>PR merged at: ${prData.merged_at}</p>`
 
                 const tags = await getTags(octokit, owner, repo, true)
-                const versions = await getVersionsFromBranches(octokit, branches, owner, repo, prMergedAt, pull_number, tags)
+                const versions = await getVersionsFromBranches(octokit, branches, owner, repo, prCreateAt, pull_number, tags)
                 const sortedVersions = {}
                 Object.keys(versions).sort().forEach(key => {
                     sortedVersions[key] = versions[key]
