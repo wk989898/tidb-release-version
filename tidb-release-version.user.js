@@ -125,12 +125,12 @@
         return tags
     }
 
-    async function getVersionsFromBranches(octokit, branches, owner, repo, prMergedAt, pull_number, tags) {
+    async function getVersionsFromBranches(octokit, branches, owner, repo, prCreatedAt, pull_number, tags) {
         const versions = {}
         const prTagsMap = {}
-        const since = prMergedAt.toISOString()
+        const since = prCreatedAt.toISOString()
         tags.forEach(tag => {
-            if (new Date(tag.date) > prMergedAt) {
+            if (new Date(tag.date) > prCreatedAt) {
                 prTagsMap[tag.sha] = tag
             }
         })
