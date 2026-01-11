@@ -30,6 +30,7 @@
     const EVENT_TYPE = `${NAME}-replace-state`
     const PULL_REG = /pull\/\d+$/
     const TIME_INTERVAL = 500
+    const CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
 
 
     function getRepoFromURL() {
@@ -67,61 +68,98 @@
 
     async function getBranches(octokit, owner, repo, disableCache = false) {
         const key = `${owner}-${repo}-branches`
-        let branches = null
+        let cached = null
         if (disableCache) {
             localStorage.removeItem(key)
         } else {
-            branches = JSON.parse(localStorage.getItem(key))
+            try {
+                cached = JSON.parse(localStorage.getItem(key))
+            } catch (e) {
+                cached = null
+            }
         }
-        if (branches === null) {
-            branches = await octokit.paginate(octokit.rest.repos.listBranches, {
-                owner,
-                repo,
-                per_page: 100,
-            }).then(res => res.filter(filterBranch).map(branch => branch.name))
-            localStorage.setItem(key, JSON.stringify(branches))
+
+        if (cached) {
+            // new format: { data: [...], ts: 123 }
+            if (cached.data && Array.isArray(cached.data) && (Date.now() - cached.ts < CACHE_TTL_MS)) {
+                return cached.data
+            }
+            // fallback for old format (plain array)
+            if (Array.isArray(cached)) {
+                // migrate cache to new format
+                try {
+                    localStorage.setItem(key, JSON.stringify({ data: cached, ts: Date.now() }))
+                } catch (e) {}
+                return cached
+            }
         }
+
+        const branches = await octokit.paginate(octokit.rest.repos.listBranches, {
+            owner,
+            repo,
+            per_page: 100,
+        }).then(res => res.filter(filterBranch).map(branch => branch.name))
+        try {
+            localStorage.setItem(key, JSON.stringify({ data: branches, ts: Date.now() }))
+        } catch (e) {}
         return branches
     }
 
     async function getTags(octokit, owner, repo, disableCache = false) {
         const key = `${owner}-${repo}-tags`
-        let tags = null
+        let cached = null
         if (disableCache) {
             localStorage.removeItem(key)
         } else {
-            tags = JSON.parse(localStorage.getItem(key))
+            try {
+                cached = JSON.parse(localStorage.getItem(key))
+            } catch (e) {
+                cached = null
+            }
         }
-        if (tags === null) {
-            let listTags = await octokit.paginate(octokit.rest.repos.listTags, {
-                owner,
-                repo,
-                per_page: 100,
-            })
-            tags = await Promise.all(
-                listTags.map(async tag => {
-                    try {
-                        const { data: tagCommit } = await octokit.rest.git.getCommit({
-                            owner,
-                            repo,
-                            commit_sha: tag.commit.sha
-                        })
-                        return {
-                            name: tag.name,
-                            sha: tag.commit.sha,
-                            date: tagCommit.author.date
-                        }
-                    } catch (e) {
-                        return {
-                            name: tag.name,
-                            sha: tag.commit.sha,
-                            date: "0" // default date
-                        }
+
+        if (cached) {
+            if (cached.data && Array.isArray(cached.data) && (Date.now() - cached.ts < CACHE_TTL_MS)) {
+                return cached.data
+            }
+            if (Array.isArray(cached)) {
+                try {
+                    localStorage.setItem(key, JSON.stringify({ data: cached, ts: Date.now() }))
+                } catch (e) {}
+                return cached
+            }
+        }
+
+        let listTags = await octokit.paginate(octokit.rest.repos.listTags, {
+            owner,
+            repo,
+            per_page: 100,
+        })
+        const tags = await Promise.all(
+            listTags.map(async tag => {
+                try {
+                    const { data: tagCommit } = await octokit.rest.git.getCommit({
+                        owner,
+                        repo,
+                        commit_sha: tag.commit.sha
+                    })
+                    return {
+                        name: tag.name,
+                        sha: tag.commit.sha,
+                        date: tagCommit.author.date
                     }
-                })
-            )
-            localStorage.setItem(key, JSON.stringify(tags))
-        }
+                } catch (e) {
+                    return {
+                        name: tag.name,
+                        sha: tag.commit.sha,
+                        date: "0" // default date
+                    }
+                }
+            })
+        )
+        try {
+            localStorage.setItem(key, JSON.stringify({ data: tags, ts: Date.now() }))
+        } catch (e) {}
         return tags
     }
 
