@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         tidb-release-version
-// @version      0.04
+// @version      0.05
 // @description  A userscript for GitHub to query tidb release version
 // @author       wk989898
 // @homepage     https://github.com/wk989898/tidb-release-version
@@ -261,7 +261,7 @@
                     <div class="px-4 mt-3 color-fg-default text-bold no-underline" id="${LOADING}">
                         Loading...
                     </div>
-                    <ul class="list-style-none" id="${VERSION_LIST}" style="display: none"></ul>
+                    <ul class="list-style-none" id="${VERSION_LIST}" style="display: none; max-height: calc(100vh - 200px); overflow-y: auto;"></ul>
                     <div class="px-3 mb-1 mt-2">
                         <div class="position-relative width-fit d-inline-block">
                             <button class="btn btn-primary BtnGroup-item border-right-0 js-toggle-hidden rounded-2 width-fit" id="${REFRESH_BUTTON}">
@@ -292,6 +292,7 @@
         })
         document.getElementById(REFRESH_BUTTON).addEventListener("click", () => {
             loadingIndicator.style.display = 'block'
+            loadingIndicator.innerText = 'Loading...'
             versionList.style.display = 'none'
             versionList.innerHTML = ""
             getReleaseVersion(true).then(versions => {
