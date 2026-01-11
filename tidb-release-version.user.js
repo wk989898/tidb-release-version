@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         tidb-release-version
-// @version      0.05
+// @version      0.0.5
 // @description  A userscript for GitHub to query tidb release version
 // @author       wk989898
 // @homepage     https://github.com/wk989898/tidb-release-version
@@ -89,7 +89,7 @@
                 // migrate cache to new format
                 try {
                     localStorage.setItem(key, JSON.stringify({ data: cached, ts: Date.now() }))
-                } catch (e) {}
+                } catch (e) { }
                 return cached
             }
         }
@@ -101,7 +101,7 @@
         }).then(res => res.filter(filterBranch).map(branch => branch.name))
         try {
             localStorage.setItem(key, JSON.stringify({ data: branches, ts: Date.now() }))
-        } catch (e) {}
+        } catch (e) { }
         return branches
     }
 
@@ -125,7 +125,7 @@
             if (Array.isArray(cached)) {
                 try {
                     localStorage.setItem(key, JSON.stringify({ data: cached, ts: Date.now() }))
-                } catch (e) {}
+                } catch (e) { }
                 return cached
             }
         }
@@ -159,7 +159,7 @@
         )
         try {
             localStorage.setItem(key, JSON.stringify({ data: tags, ts: Date.now() }))
-        } catch (e) {}
+        } catch (e) { }
         return tags
     }
 
