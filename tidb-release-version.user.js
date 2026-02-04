@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         tidb-release-version
-// @version      0.0.5
+// @version      0.0.6
 // @description  A userscript for GitHub to query tidb release version
 // @author       wk989898
 // @homepage     https://github.com/wk989898/tidb-release-version
-// @updateURL    https://github.com/wk989898/tidb-release-version/raw/master/tidb-release-version.user.js
-// @downloadURL  https://github.com/wk989898/tidb-release-version/raw/master/tidb-release-version.user.js
+// @updateURL    https://raw.githubusercontent.com/wk989898/tidb-release-version/master/tidb-release-version.user.js
+// @downloadURL  https://raw.githubusercontent.com/wk989898/tidb-release-version/master/tidb-release-version.user.js
 // @supportURL   https://github.com/wk989898/tidb-release-version
 // @match        https://github.com/pingcap/*
 // @match        https://github.com/tikv/*
@@ -25,13 +25,17 @@
     const LOADING = `${NAME}-loading-indicator`
     const VERSION_LIST = `${NAME}-version-list`
     const REFRESH_BUTTON = `${NAME}-refresh-btn`
-    const PARENT_ELEMENT = ".gh-header-actions"
+    const ANCHOR_ELEMENT = "#_R_n52hd_"
     const BROTHER_CLASS = "flex-md-order-2"
     const EVENT_TYPE = `${NAME}-replace-state`
     const PULL_REG = /pull\/\d+$/
     const TIME_INTERVAL = 500
     const CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
 
+
+    function getParentElement() {
+        return document.querySelector(ANCHOR_ELEMENT).parentElement.parentElement
+    }
 
     function getRepoFromURL() {
         const currentURL = window.location.pathname
@@ -273,21 +277,24 @@
         }
 
         const contnet = `
-        <details class="position-relative details-overlay details-reset js-codespaces-details-container hx_dropdown-fullscreen">
-            <summary class="Button--secondary Button--small Button float-none">
-                <span class="Button-content">
-                    <span class="Button-label">Version</span>
+        <div class="position-relative">
+            <button type="button" aria-haspopup="true" aria-expanded="false" tabindex="0" class="prc-Button-ButtonBase-9n-Xk" data-loading="false" data-size="small" data-variant="default" id="${NAME}-dropdown-toggle">
+                <span data-component="buttonContent" data-align="center" class="prc-Button-ButtonContent-Iohp5">
+                    <span data-component="leadingVisual" class="prc-Button-Visual-YNt2F prc-Button-VisualWrap-E4cnq">
+                        <svg aria-hidden="true" focusable="false" class="octicon octicon-code hide-sm" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" display="inline-block" overflow="visible" style="vertical-align:text-bottom">
+                            <path d="m11.28 3.22 4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734L13.94 8l-3.72-3.72a.749.749 0 0 1 .326-1.275.749.749 0 0 1 .734.215Zm-6.56 0a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042L2.06 8l3.72 3.72a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L.47 8.53a.75.75 0 0 1 0-1.06Z"></path>
+                        </svg>
+                    </span>
+                    <span data-component="text" class="prc-Button-Label-FWkx3">Version</span>
+                    <span data-component="trailingVisual" class="prc-Button-Visual-YNt2F prc-Button-VisualWrap-E4cnq">
+                        <svg aria-hidden="true" focusable="false" class="octicon octicon-triangle-down" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" display="inline-block" overflow="visible" style="vertical-align:text-bottom">
+                            <path d="m4.427 7.427 3.396 3.396a.25.25 0 0 0 .354 0l3.396-3.396A.25.25 0 0 0 11.396 7H4.604a.25.25 0 0 0-.177.427Z"></path>
+                        </svg>
+                    </span>
                 </span>
-                <span class="Button-visual Button-trailingAction">
-                    <svg aria-hidden="true" height="16" viewBox="0 0 16 16" width="16" class="octicon">
-                        <path
-                            d="m4.427 7.427 3.396 3.396a.25.25 0 0 0 .354 0l3.396-3.396A.25.25 0 0 0 11.396 7H4.604a.25.25 0 0 0-.177.427Z">
-                        </path>
-                    </svg>
-                </span>
-            </summary>
+            </button>
             <div class="position-relative">
-                <div class="dropdown-menu dropdown-menu-sw p-0 overflow-hidden" style="top:6px;width:400px;max-width: calc(100vw - 320px);">
+                <div class="dropdown-menu dropdown-menu-sw p-0 overflow-hidden" id="${NAME}-dropdown-menu" style="display:none;top:6px;width:400px;max-width: calc(100vw - 320px);">
                     <div class="input-group mt-2 px-3">
                         <input class="form-control input-monospace input-sm color-bg-subtle" placeholder="github token" type="password" id="${INPUT_TOKEN}" />
                         <div class="input-group-button">
@@ -309,11 +316,35 @@
                     </div>
                 </div>
             </div>
-        </details>`
+        </div>`
         const versionButton = document.createElement("div")
         versionButton.classList.add(BROTHER_CLASS)
         versionButton.innerHTML = contnet
-        document.querySelector(PARENT_ELEMENT).appendChild(versionButton)
+        getParentElement().appendChild(versionButton)
+
+        const dropdownToggle = document.getElementById(`${NAME}-dropdown-toggle`)
+        const dropdownMenu = document.getElementById(`${NAME}-dropdown-menu`)
+        if (dropdownToggle && dropdownMenu) {
+            const setOpen = (open) => {
+                dropdownMenu.style.display = open ? 'block' : 'none'
+                dropdownToggle.setAttribute('aria-expanded', open ? 'true' : 'false')
+            }
+            dropdownToggle.addEventListener("click", (e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setOpen(dropdownMenu.style.display !== 'block')
+            })
+            document.addEventListener("click", (e) => {
+                if (!versionButton.contains(e.target)) {
+                    setOpen(false)
+                }
+            })
+            document.addEventListener("keydown", (e) => {
+                if (e.key === "Escape") {
+                    setOpen(false)
+                }
+            })
+        }
         const loadingIndicator = document.getElementById(LOADING)
         const versionList = document.getElementById(VERSION_LIST)
         document.getElementById(INPUT_TOKEN_BUTTON).addEventListener("click", (e) => {
@@ -378,7 +409,10 @@
             versionList.style.display = 'block'
         }).catch(err => {
             console.error("meet error when check release version\n", err)
-            document.getElementById(LOADING).innerText = err.message
+            const loadingIndicator = document.getElementById(LOADING)
+            if (loadingIndicator) {
+                loadingIndicator.innerText = err.message
+            }
         })
     }
 
@@ -388,7 +422,7 @@
     proxy(() => {
         if (PULL_REG.test(window.location.pathname)) {
             const interval = setInterval(() => {
-                if (document.querySelector(PARENT_ELEMENT)) {
+                if (document.querySelector(ANCHOR_ELEMENT)) {
                     clearInterval(interval)
                     start()
                 }
