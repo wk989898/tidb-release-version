@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         tidb-release-version
-// @version      0.0.6
+// @version      0.0.7
 // @description  A userscript for GitHub to query tidb release version
 // @author       wk989898
 // @homepage     https://github.com/wk989898/tidb-release-version
@@ -25,7 +25,7 @@
     const LOADING = `${NAME}-loading-indicator`
     const VERSION_LIST = `${NAME}-version-list`
     const REFRESH_BUTTON = `${NAME}-refresh-btn`
-    const ANCHOR_ELEMENT = "#_R_n52hd_"
+    const ANCHOR_ELEMENT = `[data-component="PH_Actions"]`
     const BROTHER_CLASS = "flex-md-order-2"
     const EVENT_TYPE = `${NAME}-replace-state`
     const PULL_REG = /pull\/\d+$/
@@ -34,7 +34,7 @@
 
 
     function getParentElement() {
-        return document.querySelector(ANCHOR_ELEMENT).parentElement.parentElement
+        return document.querySelector(ANCHOR_ELEMENT).lastChild
     }
 
     function getRepoFromURL() {
