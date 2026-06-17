@@ -95,6 +95,11 @@
             border-radius: 12px;
             font-size: 12px;
             font-weight: 600;
+            text-decoration: none;
+        }
+
+        a.tag:hover {
+            text-decoration: underline;
         }
 
         @media (max-width: 600px) {
@@ -255,12 +260,17 @@
                             for (let commit of commits) {
                                 if (prTagsMap[commit.sha] !== void 0) {
                                     const tag = prTagsMap[commit.sha]
-                                    versions[branch] = tag.name
+                                    versions[branch] = {
+                                        version: tag.name
+                                    }
                                 }
                                 if (commit.commit.message.includes(`#${pull_number}`)) {
                                     if (versions[branch] === void 0) {
-                                        versions[branch] = "Next Release"
+                                        versions[branch] = {
+                                            version: "Next Release"
+                                        }
                                     }
+                                    versions[branch].commitUrl = `https://github.com/${owner}/${repo}/commit/${commit.sha}`
                                     cherryPickExist = true
                                     break
                                 }
@@ -280,6 +290,20 @@
                 })
             )
             return versions
+        }
+
+        function getVersionName(versionInfo) {
+            if (typeof versionInfo === "string") {
+                return versionInfo
+            }
+            return versionInfo.version
+        }
+
+        function getCommitUrl(versionInfo) {
+            if (typeof versionInfo === "string") {
+                return null
+            }
+            return versionInfo.commitUrl
         }
 
         document.getElementById('checkBtn').addEventListener('click', async function () {
@@ -327,9 +351,16 @@
                     sortedVersions[key] = versions[key]
                 })
                 for (const branch in sortedVersions) {
+                    const versionInfo = sortedVersions[branch]
+                    const commitUrl = getCommitUrl(versionInfo)
+                    const versionName = getVersionName(versionInfo)
                     resultHTML += `<div class="release-info">`
                     resultHTML += `<h3 class="release-branch">${branch}</h3>`
-                    resultHTML += `<p>This PR will be included in the <span class="tag">${sortedVersions[branch]}</span> version.</p>`
+                    if (commitUrl) {
+                        resultHTML += `<p>This PR will be included in the <a class="tag" href="${commitUrl}" target="_blank" rel="noopener noreferrer">${versionName}</a> version.</p>`
+                    } else {
+                        resultHTML += `<p>This PR will be included in the <span class="tag">${versionName}</span> version.</p>`
+                    }
                     resultHTML += `</div>`
                 }
                 resultDiv.innerHTML = resultHTML

@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         tidb-release-version
-// @version      0.0.7
+// @version      0.0.8
 // @description  A userscript for GitHub to query tidb release version
 // @author       wk989898
 // @homepage     https://github.com/wk989898/tidb-release-version
@@ -205,12 +205,17 @@
                         for (let commit of commits) {
                             if (prTagsMap[commit.sha] !== void 0) {
                                 const tag = prTagsMap[commit.sha]
-                                versions[branch] = tag.name
+                                versions[branch] = {
+                                    version: tag.name
+                                }
                             }
                             if (commit.commit.message.includes(`#${pull_number}`)) {
                                 if (versions[branch] === void 0) {
-                                    versions[branch] = "Next Release"
+                                    versions[branch] = {
+                                        version: "Next Release"
+                                    }
                                 }
+                                versions[branch].commitUrl = `https://github.com/${owner}/${repo}/commit/${commit.sha}`
                                 cherryPickExist = true
                                 break
                             }
@@ -251,6 +256,20 @@
         return versions
     }
 
+    function getVersionName(versionInfo) {
+        if (typeof versionInfo === "string") {
+            return versionInfo
+        }
+        return versionInfo.version
+    }
+
+    function getCommitUrl(versionInfo) {
+        if (typeof versionInfo === "string") {
+            return null
+        }
+        return versionInfo.commitUrl
+    }
+
     function genItems(versions) {
         let content = ""
         const sortedVersions = {}
@@ -258,11 +277,18 @@
             sortedVersions[key] = versions[key]
         })
         for (const branch in sortedVersions) {
+            const versionInfo = sortedVersions[branch]
+            const commitUrl = getCommitUrl(versionInfo)
+            const versionName = getVersionName(versionInfo)
             content += `
         <li class="Box-row px-3 py-1 mt-0">
             <h4 class="d-flex flex-items-center px-1 color-fg-default text-bold no-underline">${branch}</h4>
             <div class="d-flex flex-wrap">`
-            content += `<span class="Button--small px-1 m-1 State State--closed d-flex flex-items-center" style="font-size: small;">${sortedVersions[branch]}</span>`
+            if (commitUrl) {
+                content += `<a class="Button--small px-1 m-1 State State--closed d-flex flex-items-center" style="font-size: small;" href="${commitUrl}" target="_blank" rel="noopener noreferrer">${versionName}</a>`
+            } else {
+                content += `<span class="Button--small px-1 m-1 State State--closed d-flex flex-items-center" style="font-size: small;">${versionName}</span>`
+            }
             content += `
             </div>
         </li>`
